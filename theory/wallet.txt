@@ -1,0 +1,48 @@
+miller rabbit test
+
+a fast, probabilistic algorithm used to determine whether a given number is 
+likely prime
+
+To test an odd integer n > 2, the algorithm follows these steps:
+
+Decompose n - 1: Express n - 1 as (2^S * d), where d is an odd number.
+
+choose a ramdom base a: pick a random integer a such that 2 =< a =< n - 2
+
+calculate x = a^d (mod n)
+
+check base conditions: if x == 1 ir x == n - 1
+the number n is "probably prime" for this base. 
+You pass the test and move to the next iteration.
+
+[CLASS ARCHITECTURE: Wallet]
+- On Instantiation (`__init__`):
+  * Generates two independent 512-bit primes ('p' and 'q').
+  * Computes public modulus 'n' (1024-bit total) and 'phi'.
+  * Fixes public exponent 'e' to the industry standard 65537.
+  * Extracts the 'address' from the last 16 hex characters of the public key.
+- Sign Method (`sign`):
+  * Signs text by calculating: Signature = (Hash(Message) ^ d) % n.
+- Verify Method (`verify`):
+  * Decrypts signature by calculating: Restored_Hash = (Signature ^ e) % n.
+  * Validates identity by ensuring Restored_Hash matches local Message Hash.
+
+[EXECUTION PROFILE: QUICK SMOKE TEST]
+When executed directly as a script, the architecture proves itself via a 
+3-phase lifecycle check:
+
+Phase 1: Wallet Key Generation
+  - Generates unique keys for entity 'alice'.
+  - Outputs structural metadata: Wallet Address, public exponent (e=65537), 
+    and total bit-length of public modulus 'n' (~1024 bits).
+
+Phase 2: Intent Signing & Validation
+  - Plaintext: "Alice pays Bob 10 PyCoin"
+  - Action: Wallet utilizes private key 'd' to generate a signature block.
+  - Verification: Wallet utilizes public key 'e'. Returns TRUE, proving 
+    the transaction originated from Alice and remained untouched.
+
+Phase 3: Malicious Tamper Interception
+  - Plaintext Altered: "Alice pays Eve 999 PyCoin" (Signature kept identical).
+  - Verification: Wallet re-hashes modified text. The math yields a complete 
+    mismatch against the signature. Returns FALSE, instantly halting fraud.
