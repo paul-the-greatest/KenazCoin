@@ -1,61 +1,50 @@
-#end to end demo
 #wallets -> transactions -> merkletree -> mined block -> blockchain
+#using alice, bob, carol, david etc... this time to make it clearer
 
-import time
 from wallet import Wallet
 from transaction import Transaction
-from merkletree import MerkleTree
-from PoW import Minedblockchain
-
+from blockchain import Blockchain
+ 
+ 
 def main():
-    print('='*60)
-    print(' Coin Blockchain demo')
-    print('='*60)
-
-    #wallets
-    print("\n[1] Generating wallets (RSA 512-bit) ...")
-    P1 = Wallet(key_bits=512) #alice 
-    P2 = Wallet(key_bits=512) #bob
-    P3 = Wallet(key_bits=512) #charlie
-    print(f"  P1: {P1}")
-    print(f"  P2: {P2}")
-    print(f"  P3: {P3}")
-
-    #signed transactions
-    tx1 = Transaction(P1, P2.address,   10.0)
-    tx2 = Transaction(P2, P3.address,  4.0)
-    tx3 = Transaction(P3, P1.address,  1.5)
+    print("=" * 60)
+    print("  NCoin / UTXO Demo")
+    print("=" * 60)
  
-    tx1.sign(P1)
-    tx2.sign(P2)
-    tx3.sign(P3)
+    print("\n[1] Generating wallets …")
+    alice = Wallet(key_bits=512)
+    bob = Wallet(key_bits=512)
+    carol = Wallet(key_bits=512)
+    print(f"Alice: {alice}")
+    print(f"Bob  : {bob}")
+    print(f"Carol: {carol}")
  
-    transactions = [tx1, tx2, tx3]
-    for tx in transactions:
-        print(f"  {tx}  valid={tx.is_valid()}")
-
-    print("\n[3] Building Merkle tree ...")
-    tx_strings = [tx.to_string() for tx in transactions]
-    tree = MerkleTree(tx_strings)
-    print(f"  Merkle root : {tree.get_root()}")
-
-
-    print("\n[4] Mining block (difficulty=3) ...")
-    bc = Minedblockchain(difficulty=3)
+    bc = Blockchain(difficulty=3)
  
-    t0 = time.time()
-    block = bc.add_block({
-        "merkle_root":    tree.get_root(),
-        "tx_count":       len(transactions),
-        "transactions":   tx_strings,
-    })
-    print(f"  Block {block.index} mined in {time.time()-t0:.3f}s")
-    print(f"  Nonce : {block.nonce:,}")
-    print(f"  Hash  : {block.hash}")
-
-    # validate the chain
-    print(f"\n[5] Chain integrity check … {bc.is_valid()}")
-    print("\n" + str(bc))
+    print("\n[2] Block 1 - Alice mines (coinbase reward) …")
+    block1 = bc.mine_block(transactions=[], miner_address=alice.address)
+    print(f"mined block {block1.index} | nonce={block1.nonce}")
+    print(f"Alice balance: {bc.utxo_set.get_balance(alice.address)}")
+ 
+    print("\n[3] Block 2 / Alice pays Bob 20, Carol mines …")
+    tx1 = Transaction.new_transfer(alice, bob.address, 20, bc.utxo_set)
+    block2 = bc.mine_block(transactions=[tx1], miner_address=carol.address)
+    print(f"mined block {block2.index} | nonce={block2.nonce}")
+    print(f"Alice balance: {bc.utxo_set.get_balance(alice.address)}")
+    print(f"Bob balance  : {bc.utxo_set.get_balance(bob.address)}")
+    print(f"Carol balance: {bc.utxo_set.get_balance(carol.address)}")
+ 
+    print("\n[4] Block 3 - Bob pays Carol 5, Bob mines …")
+    tx2 = Transaction.new_transfer(bob, carol.address, 5, bc.utxo_set)
+    block3 = bc.mine_block(transactions=[tx2], miner_address=bob.address)
+    print(f"mined block {block3.index} | nonce={block3.nonce}")
+    print(f"Alice balance: {bc.utxo_set.get_balance(alice.address)}")
+    print(f"Bob balance  : {bc.utxo_set.get_balance(bob.address)}")
+    print(f"Carol balance: {bc.utxo_set.get_balance(carol.address)}")
+ 
+    print(f"\n[5] Chain valid? {bc.is_valid()}")
+    print(f"\n{bc}")
+    print(f"\n{bc.utxo_set}")
  
  
 if __name__ == "__main__":

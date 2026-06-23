@@ -1,80 +1,169 @@
 from block import Block
-
+from merkletree import MerkleTree
+from PoW import Proofofwork
+from transaction import Transaction
+from utxo import UTXOSet
 
 class Blockchain:
-    pass
+    
 
-    def __init__(self):
-        self.chain: list[Block] = []
+    def __init__(self, difficulty=3):
+        self.chain = []
+        self.utxo_set = UTXOSet()
+        self.pow = Proofofwork(difficulty)
         self._create_genesis_block()
 
-    
-    def _create_genesis_block(self): #intern
-        genesis = Block(index=0, data="Genesis Block", previous_hash='O'*64)
+    def _create_genesis_block(self): #genesisblock
+        genesis = Block(index=0, data={"transactions": [], "merkle_root": "0" * 64}, previous_hash="0" * 64)
         self.chain.append(genesis)
-
-    #api
-
+ 
     @property
     def last_block(self):
-        return self.chain[-1] #self.chain[len(self.chain) - 1]
+        return self.chain[-1] #lastblock
     
-    def add_block(self, data):
-        #creates a new block and appends it
-        #future = new_block.mine_block(difficulty)
+ 
 
-        new_block = Block(
-            index=len(self.chain),
-            data=data,
-            previous_hash=self.last_block.hash,
-        )
-        self.chain.append(new_block)
-        return new_block 
+    #validation 
+        """
+        Checks each tx in order: if
+          1 signature is valid (or it's a well-formed coinbase)
+          2 every input exists in the UTXO set
+          3 no input is reused twice within the same (double-spend)
+          4 inputs cover outputs (no minting out of thin air, except coinbase)
+        it returns T/F. raises nothing, just reports.
+        """
     
-    def is_valid(self):
-        #walk the chain and verify if its stores hash matches and previous
-
-        for i in range(1, len(self.chain)):
-            current = self.chain[i]
-            previous = self.chain[i - 1]
-
-            if current.previous_hash != current.compute_hash():
-                print(f'[INVALID] Block {i} hash mismatch.')
+    def _validate_transactions(self, transactions):
+        spent_in_this_block = set()
+        coinbase_count = 0
+ 
+        for tx in transactions:
+            if not tx.is_valid():
+                print("[INVALID] Transaction failed signature/structure check.")
                 return False
-            
-            if current.previous_hash != previous.hash:
-                print(f"[INVALID] Block {i} broken link to block {i-1}.")
+ 
+            if tx.is_coinbase():
+                coinbase_count += 1
+                if coinbase_count > 1:
+                    print("[INVALID] More than one coinbase transaction.")
+                    return False
+                continue
+ 
+            total_in = 0
+            for tx_input in tx.inputs:
+                key = tx_input.key()
+ 
+                if key in spent_in_this_block:
+                    print(f"[INVALID] Double-spend within block: {key}")
+                    return False
+ 
+                if not self.utxo_set.is_unspent(tx_input):
+                    print(f"[INVALID] Input references unknown/spent output: {key}")
+                    return False
+ 
+                total_in += self.utxo_set.utxos[key].amount
+                spent_in_this_block.add(key)
+ 
+            total_out = sum(o.amount for o in tx.outputs)
+            if total_out > total_in:
+                print(f"[INVALID] Outputs ({total_out}) exceed inputs ({total_in}).")
                 return False
-            
+ 
         return True
     
-    def __repr__(self):
-        lines = [f'Blockchain ({len(self.chain)}) blocks): ']
-    
-        for b in self.chain:
+
+#mining 
+ 
+    def mine_block(self, transactions, miner_address):
+        #transaction: list of Transaction (regular, already signed)
+        #miner_address: receives the coinbase reward
+ 
+        coinbase = Transaction.new_coinbase(miner_address)
+        all_txs = [coinbase] + transactions
+ 
+        if not self._validate_transactions(all_txs):
+            return None
+ 
+        tx_strings = [tx.to_string() for tx in all_txs]
+        merkle_root = MerkleTree(tx_strings).get_root()
+ 
+        candidate = Block(
+            index=len(self.chain),
+            data={"transactions": tx_strings, "merkle_root": merkle_root},
+            previous_hash=self.last_block.hash,
+        )
+        mined = self.pow.mine(candidate)
+ 
+        # apply state changes only after the block is fully valid + mined
+        for tx in all_txs:
+            if tx.is_coinbase():
+                self.utxo_set.apply_coinbase(tx)
+            else:
+                self.utxo_set.apply_transaction(tx)
+ 
+        self.chain.append(mined)
+        return mined
+
+
+#integrity 
+
+    def is_valid(self):
+        for i in range(1, len(self.chain)): #starts in 1 becuase the last block is genesis
+            current = self.chain[i]
+            previous = self.chain[i - 1]
+ 
+            if current.hash != current.compute_hash(): #check hash
+                print(f"[INVALID] Block {i} hash mismatch.")
+                return False
+ 
+            if current.previous_hash != previous.hash: #check the last block along
+                print(f"[INVALID] Block {i} broken link to block {i-1}.")
+                return False
+ 
+            if not self.pow.is_valid_proof(current): #check pow
+                print(f"[INVALID] Block {i} does not satisfy PoW target.")
+                return False
+        return True
+ 
+    def __repr__(self): #report
+        lines = [f"Blockchain ({len(self.chain)} blocks):"]
+        for block in self.chain:
+            tx_count = len(block.data.get("transactions", []))
             lines.append(
-                f" [{b.index}] hash={b.hash[:16]}... "
-                f" prev={b.previous_hash[:16]}.."
+                f"  [{block.index}] hash={block.hash[:16]}... "
+                f"txs={tx_count} nonce={block.nonce}"
             )
-            
-        return '\n'.join(lines)
-    
+        return "\n".join(lines)
+ 
+ 
+#
+# test
 
-#quick gigga test
-
-if __name__ =='__main__':
-    blockchain = Blockchain()
-    bc = blockchain
-    bc.add_block('P1 pays P3 10 coins')
-    bc.add_block('P2 pays P4 5 coins')
-
-        
-    print(bc)
+if __name__ == "__main__":
+    from wallet import Wallet
+ 
+    alice = Wallet(key_bits=512)
+    bob= Wallet(key_bits=512)
+ 
+    bc = Blockchain(difficulty=3)
+ 
+    print("--- Block 1: Alice mines, gets coinbase reward ---")
+    block1 = bc.mine_block(transactions=[], miner_address=alice.address)
+    print(f"Mined block {block1.index} | nonce={block1.nonce}")
+    print(f"Alice balance: {bc.utxo_set.get_balance(alice.address)}\n")
+ 
+    print("--- Block 2: Alice pays Bob 10, Bob mines ---")
+    tx = Transaction.new_transfer(alice, bob.address, 10, bc.utxo_set)
+    block2 = bc.mine_block(transactions=[tx], miner_address=bob.address)
+    print(f"Mined block {block2.index} | nonce={block2.nonce}")
+    print(f"Alice balance: {bc.utxo_set.get_balance(alice.address)}")
+    print(f"Bob balance  : {bc.utxo_set.get_balance(bob.address)}")
+ 
+    print(f"\n{bc}")
     print(f"\nChain valid? {bc.is_valid()}")
  
-    # Tamper with block 1 and re-check
-    print("\n--- Tampering with block 1 ---")
-    bc.chain[1].data = "Alice pays Eve 999 coins"
-    # Note: we do NOT recompute bc.chain[1].hash  a real attacker might,
-    # but then block 2's previous_hash would still point to the old hash.
-    print(f"Chain valid? {bc.is_valid()}")
+    print("\n--- Bob tries to spend more than he has ---")
+    try:
+        bad_tx = Transaction.new_transfer(bob, alice.address, 999, bc.utxo_set)
+    except ValueError as e:
+        print(f"[REJECTED] {e}")

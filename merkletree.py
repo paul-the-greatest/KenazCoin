@@ -24,7 +24,9 @@ class MerkleTree:
         if len(level) % 2 != 0:
             level = level + [level[-1]]
         parent_level=[]
-        for i in range(0, len(level), 2):
+        for i in range(0,
+        
+         len(level), 2):
             combined=level[i] + level[i+1]
             parent_hash = sha256(combined)
             parent_level.append(parent_hash)
