@@ -4,6 +4,10 @@ from PoW import Proofofwork
 from transaction import Transaction
 from utxo import UTXOSet
 
+RETARGET_INTERVAL=5 #RECALCULATE DIFFICULTY EVERY N BLOCKS
+TARGET_BLOCK_TIME=50 # SECONDS PER BLOCK (TARGET)
+
+
 class Blockchain:
     
 
@@ -21,11 +25,32 @@ class Blockchain:
     def last_block(self):
         return self.chain[-1] #lastblock
     
+    #difficulty adjustment 
+ 
+    def _adjust_difficulty(self):
+        if len(self.chain) % RETARGET_INTERVAL != 0:
+            return
+ 
+        last = self.chain[-1]
+        previous = self.chain[-RETARGET_INTERVAL]
+ 
+        actual_time = last.timestamp - previous.timestamp
+        target_time = TARGET_BLOCK_TIME * RETARGET_INTERVAL
+ 
+        ratio = target_time / max(actual_time, 1)
+        new_difficulty = max(1, round(self.pow.difficulty * ratio))
+ 
+        if new_difficulty != self.pow.difficulty:
+            print(f"[difficulty] {self.pow.difficulty} -> {new_difficulty} "
+                  f"(actual {actual_time:.1f}s, target {target_time}s)")
+            self.pow.difficulty = new_difficulty
+            self.pow.target = "0" * new_difficulty
+ 
  
 
     #validation 
         """
-        Checks each tx in order: if
+        #Checks each tx in order: if
           1 signature is valid (or it's a well-formed coinbase)
           2 every input exists in the UTXO set
           3 no input is reused twice within the same (double-spend)

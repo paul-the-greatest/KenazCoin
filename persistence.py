@@ -135,7 +135,7 @@ if __name__ == "__main__":
     # build a small chain
     print("=== building chain ===")
     alice = Wallet(key_bits=512)
-    bob   = Wallet(key_bits=512)
+    bob = Wallet(key_bits=512)
  
     bc = Blockchain(difficulty=3)
     bc.mine_block(transactions=[], miner_address=alice.address)
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     print("\n=== saving ===")
     save_chain(bc, CHAIN_FILE)
     save_wallet(alice, WALLET_DIR)
-    save_wallet(bob,   WALLET_DIR)
+    save_wallet(bob, WALLET_DIR)
  
     # load into a fresh blockchain
     print("\n=== loading into fresh blockchain ===")
@@ -158,7 +158,7 @@ if __name__ == "__main__":
     load_chain(bc2, CHAIN_FILE)
  
     alice2 = load_wallet(alice.address, WALLET_DIR)
-    bob2   = load_wallet(bob.address,   WALLET_DIR)
+    bob2 = load_wallet(bob.address,   WALLET_DIR)
  
     print(f"\nAlice: {bc2.utxo_set.get_balance(alice2.address)}")
     print(f"Bob  : {bc2.utxo_set.get_balance(bob2.address)}")

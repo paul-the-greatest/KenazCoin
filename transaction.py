@@ -69,7 +69,9 @@ class Transaction:
         return cls(inputs=[], outputs=[output])
  
     @classmethod
-    def new_transfer(cls, sender_wallet, receiver_address, amount, utxo_set):
+    def new_transfer(cls, sender_wallet, receiver_address, amount, utxo_set, fee=0):
+
+        total_needed = amount + fee
         spendable = utxo_set.get_spendable_outputs(sender_wallet.address)
  
         inputs = []
@@ -78,23 +80,24 @@ class Transaction:
         for key, output in spendable:
             inputs.append(TxInput(tx_id=key[0], output_index=key[1]))
             total_collected += output.amount
-            if total_collected >= amount:
+            if total_collected >= total_needed:
                 break
  
-        if total_collected < amount:
+        if total_collected < total_needed:
             raise ValueError(
-                f"Insufficient funds: have {total_collected}, need {amount}"
+                f"Insufficient funds: have {total_collected}, need {total_needed} ({amount} + {fee} fee)"
             )
  
         outputs = [TxOutput(address=receiver_address, amount=amount)]
  
-        change = total_collected - amount
+        change = total_collected - total_needed  # fee stays out (goes to miner)
         if change > 0:
             outputs.append(TxOutput(address=sender_wallet.address, amount=change))
  
         tx = cls(inputs=inputs, outputs=outputs, sender_public_key=sender_wallet.public_key)
         tx.sign(sender_wallet)
         return tx
+ 
  
     # serialisation 
  

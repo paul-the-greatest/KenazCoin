@@ -82,10 +82,10 @@ class Wallet:
         while q == p:
             q = _generate_prime(bits)
  
-        n   = p * q
+        n= p * q
         phi = (p - 1) * (q - 1)
-        e   = 65537 # standard public exponent
-        d   = _mod_inverse(e, phi)
+        e= 65537 # standard public exponent
+        d= _mod_inverse(e, phi)
  
         public_key  = (e, n)
         private_key = (d, n)
@@ -95,13 +95,13 @@ class Wallet:
     def sign(self, message: str):
         d, n = self.private_key
         msg_hash = _sha256_int(message) % n   # ensure hash < n
-        return pow(msg_hash, d, n)            # Python's built-in fast modexp
+        return pow(msg_hash, d, n) # Python's built-in fast modexp
  
     def verify(self, message: str, signature: int) -> bool:
 
         e, n = self.public_key
-        msg_hash    = _sha256_int(message) % n
-        decrypted   = pow(signature, e, n)
+        msg_hash = _sha256_int(message) % n
+        decrypted = pow(signature, e, n)
         return decrypted == msg_hash
  
     def __repr__(self) -> str:
