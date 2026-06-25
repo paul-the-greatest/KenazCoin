@@ -1,10 +1,66 @@
 import json
 import os
+import hashlib
 from block import Block
 from blockchain import Blockchain
 from transaction import Transaction
 from utxo import TxInput, TxOutput
 from wallet import Wallet
+
+import hmac
+ 
+ 
+#  encryption primitives 
+# XOR stream cipher built from chained SHA-256 blocks.
+# not production-grade, but honest stdlib-only crypto:
+# key derivation : PBKDF2-HMAC-SHA256 (100k rounds, random salt)
+# keystream: SHA-256(key || iv || block_counter) repeated until len(data)
+# IV: 16 random bytes from os.urandom
+ 
+def _derive_key(password, salt):
+    #PBKDF2 turns a password into a strong 32-byte key
+    #
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100000)
+ 
+def _xor_stream(data, key, iv):
+    
+    # generates keystream by hashing (key + iv + counter) in 32-byte chunks
+    keystream = b""
+    counter = 0
+    while len(keystream) < len(data):
+        block= hashlib.sha256(key + iv + counter.to_bytes(4, "big")).digest()
+        keystream += block
+        counter += 1
+    #zip emparelha os bytes real com ruido
+    # ^ = xor; NI subject, when xor is applied, the text is unreadable, when applied again it is readable
+    return bytes(a ^ b for a, b in zip(data, keystream))  # XOR
+
+#gonna add checksum rn, so wrong passwords fail
+def _encrypt(plaintext, password):
+    salt = os.urandom(16)
+    iv= os.urandom(16)
+    key= _derive_key(password, salt)
+    mac = hmac.new(key, plaintext.encode(), hashlib.sha256).hexdigest()
+    verified  = json.dumps({"mac": mac, "payload": plaintext})
+    ciphertext = _xor_stream(verified.encode(), key, iv)
+    return (salt + iv + ciphertext).hex()
+
+
+def _decrypt(blob_hex, password):
+    raw= bytes.fromhex(blob_hex)
+    salt, iv= raw[:16], raw[16:32]
+    ciphertext = raw[32:]
+    key= _derive_key(password, salt)
+    
+    verified = json.loads(_xor_stream(ciphertext, key, iv).decode())
+    mac = hmac.new(key, verified["payload"].encode(), hashlib.sha256).hexdigest()
+    
+    if not hmac.compare_digest(mac, verified["mac"]):
+        raise ValueError("wrong password or corrupted wallet")
+    
+    return verified["payload"]
+
+
 
 
 #blockchain
@@ -22,7 +78,7 @@ def save_chain(blockchain, path="chain.json"):
     
     with open(path, "w") as f:
         json.dump(data, f, indent=2) #indent=2 is to simplify reading
-    print(f"[persistence] chain saved → {path} ({len(data)} blocks)")
+    print(f"[persistence] chain saved -> {path} ({len(data)} blocks)")
  
 def load_chain(blockchain, path="chain.json"):
     #loads blocks from disk then replays then all transactions to rebuild the utxo from scratch
@@ -92,39 +148,58 @@ def _deserialize_tx(tx_str):
 
 #wallet
 
-def save_wallet(wallet, directory="."):
+def save_wallet(wallet, directory=".", password=None):
     os.makedirs(directory, exist_ok=True)
-    path = os.path.join(directory, f"wallet_{wallet.address}.json")
-    #RSA COMPONENTS RSA wikipedia page is trustable. read about it there.
-    e, n = wallet.public_key
-    d, _ = wallet.private_key # _ is a discart
+    path= os.path.join(directory, f"wallet_{wallet.address}.json")
+    #rsa wikipedia is trustable
+    e, n= wallet.public_key
+    d, _= wallet.private_key  # _ discarded
+ 
+    payload = json.dumps({
+        "address":     wallet.address,
+        "public_key":  {"e": e, "n": n},
+        "private_key": {"d": d, "n": n},
+    }, indent=2)
+ 
+    if password:
+        # store an encrypted blob instead of plaintext JSON
+        out = {"encrypted": True, "data": _encrypt(payload, password)}
+    else:
+        out = {"encrypted": False, "data": json.loads(payload)}
  
     with open(path, "w") as f:
-        json.dump({
-            "address":     wallet.address,
-            "public_key":  {"e": e, "n": n},
-            "private_key": {"d": d, "n": n},
-        }, f, indent=2)
-    print(f"[persistence] wallet saved → {path}")
+        json.dump(out, f, indent=2)
+
+
+    lock = "🔒" if password else "🔓"
+    print(f"[persistence] wallet saved {lock} -> {path}")
  
- 
-def load_wallet(address, directory="."):
+def load_wallet(address, directory=".", password=None):
     path = os.path.join(directory, f"wallet_{address}.json")
     if not os.path.exists(path):
         raise FileNotFoundError(f"no wallet file for address {address}")
  
     with open(path) as f:
-        data = json.load(f)
-    
-    #__new__// init would erase the old address. so _new_ puts manually the old keys read on json
-    wallet = Wallet.__new__(Wallet)
+        out = json.load(f)
+ 
+    if out["encrypted"]:
+        if password is None:
+            raise ValueError("wallet is encrypted provide a password")
+        raw= _decrypt(out["data"], password)
+        data= json.loads(raw)
+    else:
+        data = out["data"]
+ 
+    # __new__ skips __init__ so we don't generate a fresh key pair
+    wallet= Wallet.__new__(Wallet)
     wallet.address= data["address"]
     wallet.public_key = (data["public_key"]["e"],  data["public_key"]["n"])
-    wallet.private_key = (data["private_key"]["d"], data["private_key"]["n"])
+    wallet.private_key= (data["private_key"]["d"], data["private_key"]["n"])
  
     print(f"[persistence] wallet loaded ← {wallet}")
     return wallet
-
+ 
+ 
 
 
 #if main

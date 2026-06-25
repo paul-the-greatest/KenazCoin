@@ -5,7 +5,6 @@ import json
 from wallet import Wallet
 from utxo import TxInput, TxOutput
 
-COINBASE_REWARD=50
 
 
 class Transaction:
@@ -63,8 +62,7 @@ class Transaction:
     #  construction helpers 
  
     @classmethod
-    def new_coinbase(cls, miner_address, reward=COINBASE_REWARD):
-        #mints new coins - no inputs, one output to the miner
+    def new_coinbase(cls, miner_address, reward):
         output = TxOutput(address=miner_address, amount=reward)
         return cls(inputs=[], outputs=[output])
  
@@ -179,3 +177,6 @@ if __name__ == "__main__":
         Transaction.new_transfer(alice, bob.address, 1000, utxo_set)
     except ValueError as e:
         print(f"[REJECTED] {e}")
+
+
+

@@ -21,3 +21,11 @@ Fase 4 — Consenso robusto
   ├── Fork detection: detectar quando recebe bloco com mesmo index
   ├── Chain replacement: substituir pela chain com mais trabalho
   └── Orphan blocks: guardar blocos cujo pai ainda não chegou
+
+
+
+message.py — sem dependências, testa isolado
+node.py — servidor + handshake + _handle_peer
+broadcast de tx (NEW_TX) e de bloco (NEW_BLOCK)
+sync.py — último, depende de tudo funcionando
+

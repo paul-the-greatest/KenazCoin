@@ -98,13 +98,27 @@ class Blockchain:
     
 
 #mining 
+
+    HALVING_INTERVAL = 100
+    INITIAL_REWARD = 50
+
+    def get_coinbase_reward(self, block_index):
+        halvings = block_index // self.HALVING_INTERVAL
+        return max(1, self.INITIAL_REWARD >> halvings)
+    
  
-    def mine_block(self, transactions, miner_address):
-        #transaction: list of Transaction (regular, already signed)
-        #miner_address: receives the coinbase reward
+    def mine_block(self, miner_address, transactions=None, mempool=None):
+        # transactions: explicit list of Transaction objects (optional)
+        # mempool: Mempool instance  if provided, pulls all pending txs
+        # both can be combined, explicit transactions take priority (prepended)
  
-        coinbase = Transaction.new_coinbase(miner_address)
-        all_txs = [coinbase] + transactions
+        pulled = mempool.get_all() if mempool else []
+        explicit = transactions or []
+        user_txs = explicit + [tx for tx in pulled if tx not in explicit]
+
+        reward  = self.get_coinbase_reward(len(self.chain))  # <-- linha nova
+        coinbase = Transaction.new_coinbase(miner_address, reward)  # <-- passa reward
+        all_txs = [coinbase] + user_txs
  
         if not self._validate_transactions(all_txs):
             return None
@@ -113,9 +127,9 @@ class Blockchain:
         merkle_root = MerkleTree(tx_strings).get_root()
  
         candidate = Block(
-            index=len(self.chain),
-            data={"transactions": tx_strings, "merkle_root": merkle_root},
-            previous_hash=self.last_block.hash,
+            index = len(self.chain),
+            data = {"transactions": tx_strings, "merkle_root": merkle_root},
+            previous_hash = self.last_block.hash,
         )
         mined = self.pow.mine(candidate)
  
@@ -125,6 +139,11 @@ class Blockchain:
                 self.utxo_set.apply_coinbase(tx)
             else:
                 self.utxo_set.apply_transaction(tx)
+ 
+        # evict confirmed transactions from the mempool
+        if mempool:
+            for tx in user_txs:
+                mempool.remove(tx.tx_id())
  
         self.chain.append(mined)
         return mined
@@ -192,3 +211,4 @@ if __name__ == "__main__":
         bad_tx = Transaction.new_transfer(bob, alice.address, 999, bc.utxo_set)
     except ValueError as e:
         print(f"[REJECTED] {e}")
+

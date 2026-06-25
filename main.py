@@ -21,7 +21,7 @@ def main():
  
     bc = Blockchain(difficulty=3)
  
-    print("\n[2] Block 1 - Alice mines (coinbase reward) …")
+    print("\n[2] Block 1 / Alice mines (coinbase reward) …")
     block1 = bc.mine_block(transactions=[], miner_address=alice.address)
     print(f"mined block {block1.index} | nonce={block1.nonce}")
     print(f"Alice balance: {bc.utxo_set.get_balance(alice.address)}")
@@ -34,7 +34,7 @@ def main():
     print(f"Bob balance  : {bc.utxo_set.get_balance(bob.address)}")
     print(f"Carol balance: {bc.utxo_set.get_balance(carol.address)}")
  
-    print("\n[4] Block 3 - Bob pays Carol 5, Bob mines …")
+    print("\n[4] Block 3 / Bob pays Carol 5, Bob mines …")
     tx2 = Transaction.new_transfer(bob, carol.address, 5, bc.utxo_set)
     block3 = bc.mine_block(transactions=[tx2], miner_address=bob.address)
     print(f"mined block {block3.index} | nonce={block3.nonce}")
