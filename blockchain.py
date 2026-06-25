@@ -19,6 +19,8 @@ class Blockchain:
 
     def _create_genesis_block(self): #genesisblock
         genesis = Block(index=0, data={"transactions": [], "merkle_root": "0" * 64}, previous_hash="0" * 64)
+        genesis.timestamp = 0 # fixed, now every node must produce the same genesis hash
+        genesis.hash = genesis.compute_hash()
         self.chain.append(genesis)
  
     @property
