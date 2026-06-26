@@ -169,8 +169,42 @@ class Blockchain:
             if not self.pow.is_valid_proof(current): #check pow
                 print(f"[INVALID] Block {i} does not satisfy PoW target.")
                 return False
+            
         return True
  
+
+
+
+    def chain_work(self):
+        # total accumulated work: sum of 16^difficulty for each block
+        # each leading zero = 1/16 chance, so difficulty d = 16^d expected hashes
+        return sum(16 ** self.pow.difficulty for _ in self.chain[1:])
+
+    def replace_chain(self, new_chain):
+        # accepts a list of Block objects already validated by the caller
+        # replaces self.chain if new_chain has more accumulated work
+        # rebuilds UTXO from scratch on replacement (safe but slow — fine for edu)
+
+        from persistence import _rebuild_utxo  # local import avoids circular dep
+
+        if len(new_chain) <= 1:
+            return False  # peer sent only genesis or empty
+
+        # compare work: rough proxy longer valid chain usually wins;
+        # for correctness we use block count * difficulty (uniform difficulty here)
+        new_work = sum(16 ** self.pow.difficulty for _ in new_chain[1:])
+        our_work  = self.chain_work()
+
+        if new_work <= our_work:
+            print(f"[consensus] peer chain rejected (work {new_work} <= ours {our_work})")
+            return False
+
+        print(f"[consensus] replacing chain (their work {new_work} > ours {our_work})")
+        self.chain = new_chain
+        self.utxo_set.utxos.clear()
+        _rebuild_utxo(self)
+        return True
+
     def __repr__(self): #report
         lines = [f"Blockchain ({len(self.chain)} blocks):"]
         for block in self.chain:
@@ -182,6 +216,10 @@ class Blockchain:
         return "\n".join(lines)
  
  
+
+
+
+
 #
 # test
 
