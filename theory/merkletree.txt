@@ -23,11 +23,11 @@ h3,4 = H(h3+h4)
 então:
 root = h(h1,2 + h3,4)
 
-          root
-        /      \
-      h12      h34
-     /  \      /  \
-    h1  h2   h3  h4
+root
+|    
+h12 | h34
+|  \     |  \
+h1  h2   h3  h4
 
 O bloco não precisa guardar todos os hashes intermediários no header
 

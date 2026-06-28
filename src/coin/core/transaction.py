@@ -2,13 +2,13 @@
 
 import hashlib 
 import json
-from wallet import Wallet
-from utxo import TxInput, TxOutput
+from coin.core.wallet import Wallet
+from coin.core.utxo import TxInput, TxOutput
 
 
 
 class Transaction:
-    def __init__(self, inputs, outputs, sender_public_key=None):
+    def __init__(self, inputs, outputs, sender_public_key=None, block_index=None):
         #inputs: list of TxInput (empty for coinbase)
         #outputs: list of TxOutput
         #sender_public_key: tuple (e, n), needed to verify signature. None for coinbase
@@ -17,14 +17,17 @@ class Transaction:
         self.outputs = outputs
         self.sender_public_key = sender_public_key
         self.signature = None
+        self.block_index = block_index
  
     def tx_id(self):
         #hash on input and output(signed)
-        payload = json.dumps({
+        payload = {
             "inputs":  [i.to_dict() for i in self.inputs],
             "outputs": [o.to_dict() for o in self.outputs],
-        }, sort_keys=True)
-        return hashlib.sha256(payload.encode()).hexdigest()
+        }
+        if self.block_index is not None:
+            payload["block_index"] = self.block_index
+        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
  
     def is_coinbase(self):
         return len(self.inputs) == 0
@@ -62,9 +65,9 @@ class Transaction:
     #  construction helpers 
  
     @classmethod
-    def new_coinbase(cls, miner_address, reward):
+    def new_coinbase(cls, miner_address, reward, block_index):
         output = TxOutput(address=miner_address, amount=reward)
-        return cls(inputs=[], outputs=[output])
+        return cls(inputs=[], outputs=[output], block_index=block_index)
  
     @classmethod
     def new_transfer(cls, sender_wallet, receiver_address, amount, utxo_set, fee=0):
@@ -101,12 +104,41 @@ class Transaction:
  
     def to_string(self):
         #canonical str representation when hashed into a block/merkle tree
-        return json.dumps({
+        d = {
             "tx_id":     self.tx_id(),
             "inputs":    [i.to_dict() for i in self.inputs],
             "outputs":   [o.to_dict() for o in self.outputs],
-            "signature": str(self.signature),
-        }, sort_keys=True)
+            "sender_public_key": list(self.sender_public_key) if self.sender_public_key else None,
+            "signature": self.signature,
+        }
+        if self.block_index is not None:
+            d["block_index"] = self.block_index
+        return json.dumps(d, sort_keys=True)
+
+    @classmethod
+    def from_string(cls, tx_str):
+        raw = json.loads(tx_str)
+
+        inputs = [
+            TxInput(tx_id=i["tx_id"], output_index=i["output_index"])
+            for i in raw.get("inputs", [])
+        ]
+        outputs = [
+            TxOutput(address=o["address"], amount=o["amount"])
+            for o in raw.get("outputs", [])
+        ]
+
+        public_key = raw.get("sender_public_key")
+        if public_key is not None:
+            public_key = tuple(public_key)
+
+        tx = cls(inputs=inputs, outputs=outputs, sender_public_key=public_key, block_index=raw.get("block_index"))
+
+        signature = raw.get("signature")
+        if signature is not None:
+            tx.signature = int(signature)
+
+        return tx
  
     def __repr__(self):
         if self.is_coinbase():
@@ -142,7 +174,7 @@ class _PublicKeyVerifier:
  
 if __name__ == "__main__":
     #alice,bob,charles,david,ferdnand ... bullshitnames 
-    from utxo import UTXOSet
+    from coin.core.utxo import UTXOSet
  
     print("Creating wallets…")
     alice = Wallet(key_bits=512)
@@ -154,7 +186,7 @@ if __name__ == "__main__":
  
     # give Alice some coins via coinbase
     print("--- Coinbase: Alice mines a block, gets 50 coins ---")
-    coinbase = Transaction.new_coinbase(alice.address, reward=50)
+    coinbase = Transaction.new_coinbase(alice.address, reward=50, block_index=1)
     print(coinbase)
     utxo_set.apply_coinbase(coinbase)
     print(f"Alice balance: {utxo_set.get_balance(alice.address)}\n")

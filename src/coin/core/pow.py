@@ -1,4 +1,4 @@
-from block import Block
+from coin.core.block import Block
 
 class Proofofwork:
     def __init__(self, difficulty: int=3):
@@ -8,11 +8,13 @@ class Proofofwork:
         self.target = "0" * difficulty
 
     
-    def mine(self, block: Block):
+    def mine(self, block: Block, abort_event=None):
         block.nonce=0
         block.hash = block.compute_hash()
 
         while not block.hash.startswith(self.target):
+            if abort_event and abort_event.is_set():
+                return None
             block.nonce += 1
             block.hash = block.compute_hash()
         return block

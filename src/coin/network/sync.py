@@ -1,6 +1,6 @@
-from block import Block
-from transaction import Transaction
-from utxo import TxInput, TxOutput
+from coin.core.block import Block
+from coin.core.transaction import Transaction
+from coin.core.utxo import TxInput, TxOutput
 import json
  
 
@@ -120,7 +120,7 @@ def _build_candidate_chain(bc, blocks):
 
 
 def _request_full_sync(node):
-    from message import make_get_blocks
+    from coin.network.message import make_get_blocks
     our_length = len(node.blockchain.chain)
     targets = list(node.peers.items())  # sem lock — caller já segura ou é snapshot suficiente
 
@@ -150,10 +150,7 @@ def _extract_transactions(block):
     txs = []
     for tx_str in block.data.get("transactions", []):
         try:
-            raw     = json.loads(tx_str)
-            inputs  = [TxInput(tx_id=i["tx_id"], output_index=i["output_index"]) for i in raw.get("inputs",  [])]
-            outputs = [TxOutput(address=o["address"], amount=o["amount"])         for o in raw.get("outputs", [])]
-            txs.append(Transaction(inputs=inputs, outputs=outputs))
+            txs.append(Transaction.from_string(tx_str))
         except Exception as e:
             print(f"[sync] failed to deserialize tx in block: {e}")
     return txs
@@ -230,14 +227,15 @@ def _try_append(node, block):
     # evict confirmed txs from mempool
     for tx in txs:
         node.mempool.remove(tx.tx_id())
- 
+
     bc.chain.append(block)
+    node._abort_event.set()
     print(f"[sync] appended block {block.index} (hash={block.hash[:16]}...)")
  
  
 def _request_full_sync(node):
     # ask all connected peers for everything we don't have
-    from message import make_get_blocks
+    from coin.network.message import make_get_blocks
     our_length = len(node.blockchain.chain)
     targets = list(node.peers.items())  
 
@@ -270,10 +268,7 @@ def _extract_transactions(block):
     txs = []
     for tx_str in block.data.get("transactions", []):
         try:
-            raw     = json.loads(tx_str)
-            inputs  = [TxInput(tx_id=i["tx_id"], output_index=i["output_index"]) for i in raw.get("inputs",  [])]
-            outputs = [TxOutput(address=o["address"], amount=o["amount"])         for o in raw.get("outputs", [])]
-            txs.append(Transaction(inputs=inputs, outputs=outputs))
+            txs.append(Transaction.from_string(tx_str))
         except Exception as e:
             print(f"[sync] failed to deserialize tx in block: {e}")
     return txs

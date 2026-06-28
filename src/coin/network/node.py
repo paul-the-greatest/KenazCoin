@@ -1,14 +1,14 @@
 import socket
 import threading
 import json
-from message import (     
+from coin.network.message import (     
     read_message, make_handshake, make_get_peers, make_peers,
     make_new_tx, make_new_block, make_blocks, make_get_blocks,
     HANDSHAKE, GET_BLOCKS, BLOCKS, NEW_TX, NEW_BLOCK, GET_PEERS, PEERS,
 )
 
-from transaction import Transaction
-from utxo import TxInput, TxOutput
+from coin.core.transaction import Transaction
+from coin.core.utxo import TxInput, TxOutput
 
 
 #each node is a tcp server and client at the same time accepts peers and connect to known peers 
@@ -27,6 +27,10 @@ class Node:
 
         self.peers={}
         self._lock = threading.Lock()
+
+        self._abort_event = threading.Event()
+        self._miner_wallet = None
+        self._miner_thread = None
 
     #server
 
@@ -131,7 +135,7 @@ class Node:
         print(f"[node] sent {len(serialized)} blocks (since index {since})")
  
     def _on_blocks(self, payload):
-        from sync import apply_blocks
+        from coin.network.sync import apply_blocks
         blocks_data = payload["blocks"]
         apply_blocks(self, blocks_data)
  
@@ -148,7 +152,8 @@ class Node:
             self.broadcast(make_new_tx(payload["tx"]), exclude_origin=None)
  
     def _on_new_block(self, payload):
-        from sync import apply_blocks
+        self._abort_event.set()
+        from coin.network.sync import apply_blocks
         apply_blocks(self, [payload["block"]])
  
     def _on_get_peers(self, conn):
@@ -187,6 +192,84 @@ class Node:
                 pass  # dead socket. will be cleaned up by its _handle_peer thread
  
 
+ 
+    # miner
+
+    def start_miner(self, wallet_address):
+        self._miner_wallet = wallet_address
+        if self._miner_thread and self._miner_thread.is_alive():
+            print("[node] miner already running")
+            return
+        self._abort_event.clear()
+        self._miner_thread = threading.Thread(target=self._miner_loop, daemon=True)
+        self._miner_thread.start()
+        print(f"[node] auto-miner started")
+
+    def stop_miner(self):
+        self._miner_wallet = None
+        self._abort_event.set()
+        print(f"[node] auto-miner stopped")
+
+    def _miner_loop(self):
+        from coin.core.transaction import Transaction
+        from coin.core.merkletree import MerkleTree
+        from coin.core.block import Block
+        from coin.storage.persistence import save_chain
+        from coin.network.message import make_new_block
+
+        while True:
+            self._abort_event.clear()
+
+            # build candidate under lock
+            with self._lock:
+                if self._miner_wallet is None:
+                    break
+                addr = self._miner_wallet
+                bc = self.blockchain
+                mp = self.mempool
+
+                pulled = mp.get_all()
+                reward = bc.get_coinbase_reward(len(bc.chain))
+                coinbase = Transaction.new_coinbase(addr, reward, len(bc.chain))
+                all_txs = [coinbase] + pulled
+
+                if not bc._validate_transactions(all_txs):
+                    self._abort_event.wait(1)
+                    continue
+
+                tx_strings = [tx.to_string() for tx in all_txs]
+                merkle_root = MerkleTree(tx_strings).get_root()
+                candidate = Block(
+                    index=len(bc.chain),
+                    data={"transactions": tx_strings, "merkle_root": merkle_root},
+                    previous_hash=bc.last_block.hash,
+                )
+
+            # mine outside lock
+            mined = bc.pow.mine(candidate, self._abort_event)
+            if mined is None:
+                continue  # aborted or chain changed
+
+            # apply state under lock
+            with self._lock:
+                if len(self.blockchain.chain) != candidate.index:
+                    continue  # chain tip changed while we mined
+
+                for tx in all_txs:
+                    if tx.is_coinbase():
+                        self.blockchain.utxo_set.apply_coinbase(tx)
+                    else:
+                        self.blockchain.utxo_set.apply_transaction(tx)
+                for tx in all_txs:
+                    self.mempool.remove(tx.tx_id())
+
+                self.blockchain.chain.append(mined)
+                print(f"[miner] mined block {mined.index} | nonce={mined.nonce}")
+
+            # broadcast & persist outside lock
+            self.broadcast(make_new_block(_serialize_block(mined)))
+            save_chain(self.blockchain, "chain.json")
+
 
 #serialization helpers
 def _serialize_block(block):
@@ -200,12 +283,8 @@ def _serialize_block(block):
     }
  
 def _deserialize_tx(tx_str):
-    # reconstruct a minimal Transaction for mempool acceptance
     try:
-        raw = json.loads(tx_str)
-        inputs = [TxInput(tx_id=i["tx_id"], output_index=i["output_index"]) for i in raw.get("inputs",  [])]
-        outputs = [TxOutput(address=o["address"], amount=o["amount"])         for o in raw.get("outputs", [])]
-        return Transaction(inputs=inputs, outputs=outputs)
+        return Transaction.from_string(tx_str)
     except Exception as e:
         print(f"[node] failed to deserialize tx: {e}")
         return None

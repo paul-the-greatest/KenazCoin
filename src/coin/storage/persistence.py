@@ -1,11 +1,11 @@
 import json
 import os
 import hashlib
-from block import Block
-from blockchain import Blockchain
-from transaction import Transaction
-from utxo import TxInput, TxOutput
-from wallet import Wallet
+from coin.core.block import Block
+from coin.core.blockchain import Blockchain
+from coin.core.transaction import Transaction
+from coin.core.utxo import TxInput, TxOutput
+from coin.core.wallet import Wallet
 
 import hmac
  
@@ -111,7 +111,7 @@ def load_chain(blockchain, path="chain.json"):
         raise ValueError("[persistence] loaded chain failed integrity check!")
  
     _rebuild_utxo(blockchain)
-    print(f"[persistence] chain loaded ← {path} ({len(blockchain.chain)} blocks)")
+    print(f"[persistence] chain loaded <- {path} ({len(blockchain.chain)} blocks)")
 
 
 
@@ -129,24 +129,34 @@ def _rebuild_utxo(blockchain):
 
 
 def _deserialize_tx(tx_str):
-    #reconstruct a Transaction from its JSON string (inputs + outputs only)
-    #present balance 
-    raw = json.loads(tx_str)
- 
-    inputs = [
-        TxInput(tx_id=i["tx_id"], output_index=i["output_index"])
-        for i in raw.get("inputs", [])
-    ]
-    outputs = [
-        TxOutput(address=o["address"], amount=o["amount"])
-        for o in raw.get("outputs", [])
-    ]
- 
-    return Transaction(inputs=inputs, outputs=outputs)
+    return Transaction.from_string(tx_str)
 
 
 
 #wallet
+
+def list_wallets(directory="."):
+    if not os.path.exists(directory):
+        return []
+
+    wallets = []
+    for filename in os.listdir(directory):
+        if not filename.startswith("wallet_") or not filename.endswith(".json"):
+            continue
+
+        path = os.path.join(directory, filename)
+        address = filename[len("wallet_"):-len(".json")]
+
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            encrypted = data.get("encrypted", False)
+        except Exception:
+            encrypted = None
+
+        wallets.append({"address": address, "encrypted": encrypted, "path": path})
+
+    return sorted(wallets, key=lambda w: w["address"])
 
 def save_wallet(wallet, directory=".", password=None):
     os.makedirs(directory, exist_ok=True)
@@ -171,7 +181,7 @@ def save_wallet(wallet, directory=".", password=None):
         json.dump(out, f, indent=2)
 
 
-    lock = "🔒" if password else "🔓"
+    lock = "encrypted" if password else "plain"
     print(f"[persistence] wallet saved {lock} -> {path}")
  
 def load_wallet(address, directory=".", password=None):
@@ -196,10 +206,31 @@ def load_wallet(address, directory=".", password=None):
     wallet.public_key = (data["public_key"]["e"],  data["public_key"]["n"])
     wallet.private_key= (data["private_key"]["d"], data["private_key"]["n"])
  
-    print(f"[persistence] wallet loaded ← {wallet}")
+    print(f"[persistence] wallet loaded <- {wallet}")
     return wallet
  
  
+
+
+
+
+#peers
+
+PEERS_FILE = "peers.json"
+
+def save_peers(peers_dict, path=PEERS_FILE):
+    data = [[h, p] for (h, p) in peers_dict]
+    with open(path, "w") as f:
+        json.dump(data, f)
+    print(f"[persistence] peers saved -> {path} ({len(data)} known)")
+
+def load_peers(path=PEERS_FILE):
+    if not os.path.exists(path):
+        return []
+    with open(path) as f:
+        data = json.load(f)
+    print(f"[persistence] peers loaded <- {path} ({len(data)} known)")
+    return [(h, p) for h, p in data]
 
 
 #if main

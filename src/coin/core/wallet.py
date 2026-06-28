@@ -61,7 +61,6 @@ def _sha256_int(message: str):
 #Holds a public/private RSA key pair and provides sign/verify methods.
 #key_bits: size of each prime p and q (real RSA uses 1024+ per prime).
 #Keep this at 512 for fast demo generation; use 1024 for realism.
-#claude code signed ->
 
  
 class Wallet:

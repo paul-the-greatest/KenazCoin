@@ -1,8 +1,8 @@
-from block import Block
-from merkletree import MerkleTree
-from PoW import Proofofwork
-from transaction import Transaction
-from utxo import UTXOSet
+from coin.core.block import Block
+from coin.core.merkletree import MerkleTree
+from coin.core.pow import Proofofwork
+from coin.core.transaction import Transaction
+from coin.core.utxo import UTXOSet
 
 RETARGET_INTERVAL=5 #RECALCULATE DIFFICULTY EVERY N BLOCKS
 TARGET_BLOCK_TIME=50 # SECONDS PER BLOCK (TARGET)
@@ -109,32 +109,34 @@ class Blockchain:
         return max(1, self.INITIAL_REWARD >> halvings)
     
  
-    def mine_block(self, miner_address, transactions=None, mempool=None):
+    def mine_block(self, miner_address, transactions=None, mempool=None, abort_event=None):
         # transactions: explicit list of Transaction objects (optional)
         # mempool: Mempool instance  if provided, pulls all pending txs
         # both can be combined, explicit transactions take priority (prepended)
- 
+
         pulled = mempool.get_all() if mempool else []
         explicit = transactions or []
         user_txs = explicit + [tx for tx in pulled if tx not in explicit]
 
         reward  = self.get_coinbase_reward(len(self.chain))  # <-- linha nova
-        coinbase = Transaction.new_coinbase(miner_address, reward)  # <-- passa reward
+        coinbase = Transaction.new_coinbase(miner_address, reward, len(self.chain))  # <-- passa reward
         all_txs = [coinbase] + user_txs
- 
+
         if not self._validate_transactions(all_txs):
             return None
- 
+
         tx_strings = [tx.to_string() for tx in all_txs]
         merkle_root = MerkleTree(tx_strings).get_root()
- 
+
         candidate = Block(
             index = len(self.chain),
             data = {"transactions": tx_strings, "merkle_root": merkle_root},
             previous_hash = self.last_block.hash,
         )
-        mined = self.pow.mine(candidate)
- 
+        mined = self.pow.mine(candidate, abort_event)
+        if mined is None:
+            return None
+
         # apply state changes only after the block is fully valid + mined
         for tx in all_txs:
             if tx.is_coinbase():
@@ -185,7 +187,7 @@ class Blockchain:
         # replaces self.chain if new_chain has more accumulated work
         # rebuilds UTXO from scratch on replacement (safe but slow — fine for edu)
 
-        from persistence import _rebuild_utxo  # local import avoids circular dep
+        from coin.storage.persistence import _rebuild_utxo  # local import avoids circular dep
 
         if len(new_chain) <= 1:
             return False  # peer sent only genesis or empty
@@ -224,7 +226,7 @@ class Blockchain:
 # test
 
 if __name__ == "__main__":
-    from wallet import Wallet
+    from coin.core.wallet import Wallet
  
     alice = Wallet(key_bits=512)
     bob= Wallet(key_bits=512)

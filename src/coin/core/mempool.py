@@ -1,4 +1,4 @@
-from transaction import Transaction
+from coin.core.transaction import Transaction
  
  
 class Mempool:
@@ -58,9 +58,9 @@ class Mempool:
 # test
  
 if __name__ == "__main__":
-    from wallet import Wallet
-    from utxo import UTXOSet
-    from blockchain import Blockchain
+    from coin.core.wallet import Wallet
+    from coin.core.utxo import UTXOSet
+    from coin.core.blockchain import Blockchain
  
     alice = Wallet(key_bits=512)
     bob = Wallet(key_bits=512)
