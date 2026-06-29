@@ -23,6 +23,7 @@ class Node:
         self.blockchain = blockchain
         self.mempool = mempool
 
+        #
         #act peer sockets. addr to socket
 
         self.peers={}
@@ -112,7 +113,7 @@ class Node:
 
     def _on_handshake(self, payload, conn, addr): #quando handshake
         their_length = payload["chain_length"]
-        our_length   = len(self.blockchain.chain)
+        our_length = len(self.blockchain.chain)
         print(f"[node] handshake from {addr} — their chain: {their_length}, ours: {our_length}")
  
         # reply with our own handshake so they can compare chains too
@@ -264,11 +265,12 @@ class Node:
                     self.mempool.remove(tx.tx_id())
 
                 self.blockchain.chain.append(mined)
+                self.blockchain._adjust_difficulty()
                 print(f"[miner] mined block {mined.index} | nonce={mined.nonce}")
 
             # broadcast & persist outside lock
             self.broadcast(make_new_block(_serialize_block(mined)))
-            save_chain(self.blockchain, "chain.json")
+            save_chain(self.blockchain)
 
 
 #serialization helpers

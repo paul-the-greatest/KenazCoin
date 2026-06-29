@@ -7,6 +7,7 @@ from coin.core.transaction import Transaction
 from coin.core.utxo import TxInput, TxOutput
 from coin.core.wallet import Wallet
 
+import sys
 import hmac
  
  
@@ -63,8 +64,18 @@ def _decrypt(blob_hex, password):
 
 
 
+def get_data_dir():
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+    else:
+        base = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+    return os.path.join(base, "ncoin")
+
 #blockchain
-def save_chain(blockchain, path="chain.json"):
+def save_chain(blockchain, path=None):
+    if path is None:
+        path = os.path.join(get_data_dir(), "chain.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     data = []
     for block in blockchain.chain:
         data.append({
@@ -80,7 +91,9 @@ def save_chain(blockchain, path="chain.json"):
         json.dump(data, f, indent=2) #indent=2 is to simplify reading
     print(f"[persistence] chain saved -> {path} ({len(data)} blocks)")
  
-def load_chain(blockchain, path="chain.json"):
+def load_chain(blockchain, path=None):
+    if path is None:
+        path = os.path.join(get_data_dir(), "chain.json")
     #loads blocks from disk then replays then all transactions to rebuild the utxo from scratch
     #valueerror if the loaded chain fails integrity check 
     if not os.path.exists(path):
@@ -135,7 +148,9 @@ def _deserialize_tx(tx_str):
 
 #wallet
 
-def list_wallets(directory="."):
+def list_wallets(directory=None):
+    if directory is None:
+        directory = os.path.join(get_data_dir(), "wallets")
     if not os.path.exists(directory):
         return []
 
@@ -158,7 +173,9 @@ def list_wallets(directory="."):
 
     return sorted(wallets, key=lambda w: w["address"])
 
-def save_wallet(wallet, directory=".", password=None):
+def save_wallet(wallet, directory=None, password=None):
+    if directory is None:
+        directory = os.path.join(get_data_dir(), "wallets")
     os.makedirs(directory, exist_ok=True)
     path= os.path.join(directory, f"wallet_{wallet.address}.json")
     #rsa wikipedia is trustable
@@ -184,7 +201,9 @@ def save_wallet(wallet, directory=".", password=None):
     lock = "encrypted" if password else "plain"
     print(f"[persistence] wallet saved {lock} -> {path}")
  
-def load_wallet(address, directory=".", password=None):
+def load_wallet(address, directory=None, password=None):
+    if directory is None:
+        directory = os.path.join(get_data_dir(), "wallets")
     path = os.path.join(directory, f"wallet_{address}.json")
     if not os.path.exists(path):
         raise FileNotFoundError(f"no wallet file for address {address}")

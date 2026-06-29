@@ -6,13 +6,13 @@ import threading
 from coin.core.blockchain import Blockchain
 from coin.core.mempool import Mempool
 from coin.network.node import Node
-from coin.storage.persistence import load_chain, save_chain, load_wallet, save_wallet, list_wallets, load_peers, save_peers
+from coin.storage.persistence import load_chain, save_chain, load_wallet, save_wallet, list_wallets, load_peers, save_peers, get_data_dir
 from coin.core.transaction import Transaction
 from coin.core.wallet import Wallet
 from coin.network.message import make_new_tx, make_new_block
 
-CHAIN_FILE = "chain.json"
-WALLET_DIR = "wallet"
+CHAIN_FILE = os.path.join(get_data_dir(), "chain.json")
+WALLET_DIR = os.path.join(get_data_dir(), "wallets")
 
 ## helpers
  
@@ -327,4 +327,3 @@ def main():
  
 if __name__ == "__main__":
     main()
- 

@@ -1,3 +1,4 @@
+import time
 from coin.core.block import Block
 from coin.core.merkletree import MerkleTree
 from coin.core.pow import Proofofwork
@@ -6,6 +7,7 @@ from coin.core.utxo import UTXOSet
 
 RETARGET_INTERVAL=5 #RECALCULATE DIFFICULTY EVERY N BLOCKS
 TARGET_BLOCK_TIME=50 # SECONDS PER BLOCK (TARGET)
+MAX_DIFFICULTY=5 # cap so PoW stays mineable in Python (~24s/block)
 
 
 class Blockchain:
@@ -19,7 +21,7 @@ class Blockchain:
 
     def _create_genesis_block(self): #genesisblock
         genesis = Block(index=0, data={"transactions": [], "merkle_root": "0" * 64}, previous_hash="0" * 64)
-        genesis.timestamp = 0 # fixed, now every node must produce the same genesis hash
+        genesis.timestamp = time.time()
         genesis.hash = genesis.compute_hash()
         self.chain.append(genesis)
  
@@ -40,7 +42,7 @@ class Blockchain:
         target_time = TARGET_BLOCK_TIME * RETARGET_INTERVAL
  
         ratio = target_time / max(actual_time, 1)
-        new_difficulty = max(1, round(self.pow.difficulty * ratio))
+        new_difficulty = max(1, min(MAX_DIFFICULTY, round(self.pow.difficulty * ratio)))
  
         if new_difficulty != self.pow.difficulty:
             print(f"[difficulty] {self.pow.difficulty} -> {new_difficulty} "
@@ -150,6 +152,7 @@ class Blockchain:
                 mempool.remove(tx.tx_id())
  
         self.chain.append(mined)
+        self._adjust_difficulty()
         return mined
 
 
