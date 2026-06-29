@@ -101,9 +101,9 @@ src/coin/
 
 ## How It Works
 
-- **Wallets** generate RSA key pairs (512-bit primes). The address is derived from the public key — last 16 hex chars of SHA-256(pubkey). Coins live in the blockchain as UTXOs; the wallet only proves ownership via signatures.
+- **Wallets** generate RSA key pairs (512-bit primes). The address is derived from the public key last 16 hex chars of SHA-256(pubkey). Coins live in the blockchain as UTXOs; the wallet only proves ownership via signatures.
 - **Transactions** consume existing UTXOs as inputs and create new UTXOs as outputs. Each input references a previous output and carries a signature from its owner. The blockchain validates that inputs exist, aren't double-spent, and cover the outputs.
-- **Blocks** bundle transactions into a Merkle tree and are mined via Proof-of-Work — find a nonce such that SHA-256(block) starts with N leading zeros. The first miner to find one gets the coinbase reward.
+- **Blocks** bundle transactions into a Merkle tree and are mined via Proof-of-Work find a nonce such that SHA-256(block) starts with N leading zeros. The first miner to find one gets the coinbase reward.
 - **Mining** picks pending transactions from the mempool, builds a candidate block, and iterates nonces until a valid proof is found. The miner receives the block subsidy plus any transaction fees.
 - **Difficulty** adjusts every 5 blocks based on actual mining time, targeting ~50 seconds per block. Caps at difficulty 5 to keep mining feasible in Python.
 - **Network** uses TCP with a simple length-prefixed JSON protocol. Nodes exchange handshakes, blocks, transactions, and peer lists. Each node runs a TCP server and connects to known peers concurrently.
