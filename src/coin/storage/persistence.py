@@ -136,8 +136,14 @@ def _rebuild_utxo(blockchain):
             tx = _deserialize_tx(tx_str)
             if tx.is_coinbase():
                 blockchain.utxo_set.apply_coinbase(tx)
-            else:
+                continue
+            try:
                 blockchain.utxo_set.apply_transaction(tx)
+            except KeyError:
+                raise ValueError(
+                    f"[persistence] chain has invalid spend in block {block.index} "
+                    f"(tx {tx.tx_id()[:16]}...)"
+                )
 
 
 
@@ -235,15 +241,19 @@ def load_wallet(address, directory=None, password=None):
 
 #peers
 
-PEERS_FILE = "peers.json"
-
-def save_peers(peers_dict, path=PEERS_FILE):
+def save_peers(peers_dict, path=None):
+    if path is None:
+        path = os.path.join(get_data_dir(), "peers.json")
+    if os.path.dirname(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
     data = [[h, p] for (h, p) in peers_dict]
     with open(path, "w") as f:
         json.dump(data, f)
     print(f"[persistence] peers saved -> {path} ({len(data)} known)")
 
-def load_peers(path=PEERS_FILE):
+def load_peers(path=None):
+    if path is None:
+        path = os.path.join(get_data_dir(), "peers.json")
     if not os.path.exists(path):
         return []
     with open(path) as f:
