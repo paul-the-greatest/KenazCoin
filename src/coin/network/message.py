@@ -17,6 +17,7 @@ PEERS = "PEERS"# response carrying a list of (host, port) pairs
 # before attempting to parse, avoids TCP stream fragmentation issues
  
 HEADER_SIZE = 4 # bytes for the length prefix
+MAX_MESSAGE_BYTES = 5 * 1024 * 1024 # cap so a peer cannot claim an absurd frame
  
  
 def encode(msg_type, payload=None):
@@ -43,6 +44,9 @@ def read_message(sock):
         return None
  
     length = struct.unpack(">I", header)[0]
+    if length > MAX_MESSAGE_BYTES:
+        print(f"[message] frame too large ({length} bytes), dropping connection")
+        return None
     raw = _recv_exact(sock, length)
     if raw is None:
         return None

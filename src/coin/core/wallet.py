@@ -1,5 +1,5 @@
 import hashlib
-import random
+import secrets
 import math
 
 
@@ -20,7 +20,7 @@ def _is_prime(n: int, rounds: int = 20):
         d //= 2 #d = d//2
  
     for _ in range(rounds):
-        a = random.randrange(2, n - 1)
+        a = secrets.randbelow(n - 3) + 2
         x = pow(a, d, n)
         if x in (1, n - 1):
             continue
@@ -36,7 +36,7 @@ def _is_prime(n: int, rounds: int = 20):
 def _generate_prime(bits: int):
     #return a random prime
     while True:
-        candidate = random.getrandbits(bits) | (1 << bits - 1) | 1  # odd, top bit set
+        candidate = secrets.randbits(bits) | (1 << bits - 1) | 1  # odd, top bit set
         if _is_prime(candidate):
             return candidate
  

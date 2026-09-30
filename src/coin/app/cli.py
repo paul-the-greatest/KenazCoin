@@ -86,7 +86,12 @@ def cmd_send(args, wallet, blockchain, mempool, node):
         print("usage: send <address> <amount>")
         return
  
-    receiver, amount = parts[0], int(parts[1])
+    receiver = parts[0]
+    try:
+        amount = int(parts[1])
+    except ValueError:
+        print("usage: send <address> <amount>")
+        return
  
     try:
         tx = Transaction.new_transfer(wallet, receiver, amount, blockchain.utxo_set)
